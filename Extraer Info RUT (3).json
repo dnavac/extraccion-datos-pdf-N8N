@@ -1,0 +1,576 @@
+{
+  "name": "Extraer Info RUT",
+  "nodes": [
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $binary.data.fileName }}",
+                    "rightValue": ".pdf",
+                    "operator": {
+                      "type": "string",
+                      "operation": "endsWith"
+                    },
+                    "id": "e5f0a229-3dda-45af-af33-9aaa99b2aee3"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "4bc67d0c-a95a-4c88-b5ba-7730c8df7087",
+                    "leftValue": "={{ $binary.data.fileName }}",
+                    "rightValue": ".png",
+                    "operator": {
+                      "type": "string",
+                      "operation": "endsWith"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "c094b668-445d-4617-aba2-5af04e3218df",
+                    "leftValue": "={{ $binary.data.fileName }}",
+                    "rightValue": ".jpg",
+                    "operator": {
+                      "type": "string",
+                      "operation": "endsWith"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        -512,
+        256
+      ],
+      "id": "55e73169-d816-4292-97b1-f934156ea274",
+      "name": "Switch",
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Obtener el item de entrada\nconst inputData = $input.first().json;\n\nlet rawText = {};\n\ntry {\n  // En n8n, inputData ya es el objeto raíz. Navegamos directo al \"text\"\n  if (inputData.output && inputData.output[0] && inputData.output[0].content && inputData.output[0].content[0]) {\n    rawText = inputData.output[0].content[0].text || {};\n  } else if (Array.isArray(inputData) && inputData[0].output) {\n    // Por si acaso viene envuelto en un array adicional\n    rawText = inputData[0].output[0].content[0].text || {};\n  }\n\n  // Si por alguna razón la IA lo devolviera como string en el futuro, lo parseamos\n  if (typeof rawText === 'string') {\n    rawText = JSON.parse(rawText);\n  }\n} catch(e) {\n  console.log(\"Error extrayendo el JSON:\", e);\n  rawText = {};\n}\n\n// --- Extraer secciones ---\nconst ident  = rawText['Identificación']            || {};\nconst ubic   = rawText['Ubicación']                 || {};\nconst clasif = rawText['Clasificación y Actividades'] || {};\nconst meta   = rawText['Metadatos']                 || {};\n\n// --- Helpers ---\nconst cleanStr = (val) => (val != null && val !== '') ? String(val).trim().toUpperCase() : '';\n\n// --- Tipo de persona ---\nconst tipoRaw    = String(ident['24'] || '').toLowerCase();\nconst tipoPersona = (tipoRaw.includes('natural') || tipoRaw.trim() === '2') ? 'Natural' : 'Jurídica';\n\n// --- Documento e identificación ---\nconst tipoDoc = String(ident['25'] || '').toLowerCase();\nconst nit     = String(ident['5']  || '').trim();\nconst dv      = String(ident['6']  || '').trim();\nlet   nroId   = String(ident['26'] || '').trim();\n\nif (tipoDoc.includes('ciudadan')) {\n  if (nroId.length === 11) nroId = nroId.slice(0, 10);\n  else if (nroId.length === 12) nroId = nroId.slice(1, 11);\n}\n\n// --- Nombre completo ---\nlet nombreCompleto = '';\nif (tipoPersona === 'Natural') {\n  nombreCompleto = [\n    cleanStr(ident['33']),\n    cleanStr(ident['34']),\n    cleanStr(ident['31']),\n    cleanStr(ident['32']),\n  ].filter(Boolean).join(' ');\n} else {\n  nombreCompleto = cleanStr(ident['35']);\n}\n\n// --- Actividades económicas ---\nconst actividades = [];\nif (clasif['46']) actividades.push({ tipo: 'principal',  codigo: clasif['46'], fecha_inicio: clasif['47'] || null });\nif (clasif['48']) actividades.push({ tipo: 'secundaria', codigo: clasif['48'], fecha_inicio: clasif['49'] || null });\nif (clasif['50']) actividades.push({ tipo: 'otras',      codigo: clasif['50'], fecha_inicio: null });\n\n// --- Resultado base ---\nconst resultado = {\n  tipo_persona:          tipoPersona,\n  tipo_documento:        cleanStr(ident['25']),\n  nit,\n  dv,\n  numero_identificacion: nroId,\n  nombre_completo:       nombreCompleto,\n  email:                 String(ubic['42'] || '').toLowerCase().trim(),\n  telefono:              String(ubic['44'] || '').trim(),\n  direccion:             cleanStr(ubic['41']),\n  ciudad:                cleanStr(ubic['40']),\n  departamento:          cleanStr(ubic['39']),\n  pais:                  cleanStr(ubic['38']),\n  codigo_postal:         String(ubic['43'] || '').trim(),\n  responsabilidades:     rawText['Responsabilidades'] || [],\n  actividades_economicas: actividades,\n  metadata: {\n    formulario: meta['Número de formulario']            || null,\n    fecha_pdf:  meta['Fecha generación documento PDF']  || null,\n  }\n};\n\n// --- Campos extra para Jurídica ---\nif (tipoPersona === 'Jurídica') {\n  resultado.nombre_comercial    = cleanStr(ident['36']);\n  resultado.sigla               = cleanStr(ident['37']);\n  resultado.num_establecimientos = clasif['52'] || null;\n}\n\nreturn [{ json: resultado }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -112,
+        144
+      ],
+      "id": "efe83008-ce2d-4933-aa24-864b5ff0e02e",
+      "name": "Code in JavaScript",
+      "alwaysOutputData": true,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"mensaje\": \"{{ $json.message }}\",\n  \"status\": \"{{$json.ok}}\"\n} ",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        704,
+        48
+      ],
+      "id": "6673c7ad-551b-4e70-862b-d1fe55fae18c",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "KZ3gC3mwTDZWTaZi",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/KZ3gC3mwTDZWTaZi",
+          "cachedResultName": "Nodo-errores"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "error": "={{ $json.error }}"
+          },
+          "matchingColumns": [
+            "error"
+          ],
+          "schema": [
+            {
+              "id": "error",
+              "displayName": "error",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        736,
+        368
+      ],
+      "name": "Call Nodo-errores",
+      "id": "4805a1d6-7cdf-4b2b-bfa1-4d098c94b413"
+    },
+    {
+      "parameters": {
+        "resource": "image",
+        "operation": "analyze",
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "GPT-4O-MINI"
+        },
+        "text": "Eres un extractor de datos del formulario RUT de la DIAN (Colombia). \nAnaliza el documento y devuelve ÚNICAMENTE un JSON válido con esta estructura exacta, sin texto adicional, sin markdown, sin explicaciones:\n\n{\n  \"Identificación\": {\n    \"5\": \"NIT (solo dígitos, sin DV)\",\n    \"6\": \"DV (un solo dígito)\",\n    \"24\": \"Tipo de contribuyente (texto completo)\",\n    \"25\": \"Tipo de documento (texto completo, ej: Cédula de Ciudadanía)\",\n    \"26\": \"Número de identificación (solo dígitos)\",\n    \"31\": \"Primer apellido\",\n    \"32\": \"Segundo apellido\",\n    \"33\": \"Primer nombre\",\n    \"34\": \"Otros nombres\",\n    \"35\": \"Razón social (solo para jurídicas)\",\n    \"36\": \"Nombre comercial\",\n    \"37\": \"Sigla\"\n  },\n  \"Ubicación\": {\n    \"38\": \"País\",\n    \"39\": \"Departamento\",\n    \"40\": \"Ciudad/Municipio\",\n    \"41\": \"Dirección principal\",\n    \"42\": \"Correo electrónico\",\n    \"43\": \"Código postal\",\n    \"44\": \"Teléfono 1\",\n    \"45\": \"Teléfono 2\"\n  },\n  \"Clasificación y Actividades\": {\n    \"46\": \"Código actividad principal (4 dígitos)\",\n    \"47\": \"Fecha inicio actividad principal (YYYY-MM-DD)\",\n    \"48\": \"Código actividad secundaria (4 dígitos)\",\n    \"49\": \"Fecha inicio actividad secundaria (YYYY-MM-DD)\",\n    \"50\": \"Código otras actividades\",\n    \"52\": \"Número de establecimientos\"\n  },\n  \"Responsabilidades\": [\"05\", \"22\"],\n  \"Metadatos\": {\n    \"Número de formulario\": \"número completo del formulario\",\n    \"Fecha generación documento PDF\": \"fecha tal como aparece en el documento\"\n  }\n}\n\nREGLAS IMPORTANTES:\n- Devuelve SOLO el JSON, sin ningún texto antes o después\n- Si un campo no existe o no es visible, usa null\n- Los códigos numéricos de Responsabilidades deben ser un array de strings con solo los números (ej: [\"05\", \"22\"])\n- El teléfono debe incluir solo dígitos, sin espacios ni guiones\n- El código postal son exactamente 6 dígitos\n- Las fechas de actividad económica en formato YYYY-MM-DD",
+        "inputType": "base64",
+        "binaryPropertyName": "data0",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 2.1,
+      "position": [
+        -288,
+        384
+      ],
+      "id": "c6b34eda-3e7b-47c0-850f-c9a8dfc982bb",
+      "name": "Analyze image1",
+      "alwaysOutputData": true,
+      "credentials": {
+        "openAiApi": {
+          "id": "zbbII90Vnrg1F91S",
+          "name": "n8n free OpenAI API credits"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "ACIQ9oOI0h8L4P2J",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/ACIQ9oOI0h8L4P2J",
+          "cachedResultName": "procesarPDFRut"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        -288,
+        144
+      ],
+      "name": "Call ProcesarPDF",
+      "id": "be5e3711-0502-45b2-b722-4941266a37ec"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "rut",
+        "responseMode": "responseNode",
+        "options": {
+          "binaryPropertyName": "data"
+        }
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -960,
+        432
+      ],
+      "id": "b24e150d-ec25-4c91-a1b0-16bb58b10ccd",
+      "name": "recibirRutUsuario",
+      "webhookId": "2f7f186b-8c54-4651-a8a5-abb99ddbb8aa",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "rutClient",
+        "responseMode": "responseNode",
+        "options": {
+          "binaryPropertyName": "data"
+        }
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -960,
+        192
+      ],
+      "id": "fb016156-72be-4d16-b88f-357e48f6ebc5",
+      "name": "recibirRutCliente",
+      "webhookId": "dd98e988-caa4-4e89-b545-820e07e563b9"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "f99a0453-2c63-4f2b-849b-07f37445f9e2",
+              "leftValue": "={{ $('HTTP Request1').item.json.webhookUrl }}",
+              "rightValue": "rutClient",
+              "operator": {
+                "type": "string",
+                "operation": "endsWith"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        32,
+        -48
+      ],
+      "id": "7de4e276-3baf-4514-9b76-bffea64c25ec",
+      "name": "If1"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "= https://whats-app-facturacion-bot.vercel.app/api/client/update-from-rut",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "rutData",
+              "value": "={{ $('Code in JavaScript').first().json }}"
+            },
+            {
+              "name": "userId",
+              "value": "={{ $('recibirRutCliente').first().json.body.userId }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        288,
+        -112
+      ],
+      "id": "cf02afa8-e213-4df4-ab14-cf3cb548ad9d",
+      "name": "Enviar a Servidor Express Cliente",
+      "alwaysOutputData": false,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "= https://whats-app-facturacion-bot.vercel.app/api/user/update-from-rut",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "phone",
+              "value": "={{ $('recibirRutUsuario').first().json.body.phone }}"
+            },
+            {
+              "name": "rutData",
+              "value": "={{ $('Code in JavaScript').first().json }}"
+            },
+            {
+              "name": "userId",
+              "value": "={{ $('recibirRutUsuario').first().json.body.userId }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        288,
+        64
+      ],
+      "id": "241a8cf1-bfb3-4cef-8e54-42e33e0b364f",
+      "name": "Enviar a Servidor Express Usuario",
+      "alwaysOutputData": false,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.body.mediaUrl }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -720,
+        288
+      ],
+      "id": "a01b9313-5fa2-42bd-a462-3322828ea7e7",
+      "name": "HTTP Request1",
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "hEsuuxZYohGGiwXN",
+          "name": "Unnamed credential"
+        }
+      },
+      "onError": "continueErrorOutput"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Switch": {
+      "main": [
+        [
+          {
+            "node": "Call ProcesarPDF",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Analyze image1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Analyze image1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "If1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Call Nodo-errores",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call ProcesarPDF": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze image1": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Call Nodo-errores",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "recibirRutUsuario": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "recibirRutCliente": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If1": {
+      "main": [
+        [
+          {
+            "node": "Enviar a Servidor Express Cliente",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Enviar a Servidor Express Usuario",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enviar a Servidor Express Cliente": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Call Nodo-errores",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enviar a Servidor Express Usuario": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Call Nodo-errores",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request1": {
+      "main": [
+        [
+          {
+            "node": "Switch",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Call Nodo-errores",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "timeSavedMode": "fixed",
+    "errorWorkflow": "WLRDMwRkgFJb3b3M",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "versionId": "286e2fbf-423e-4e84-a7c9-2155b9b8eaed",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "5eb610d22baacec4aba8d0498e816ce8a5c3324bb924b10b102db5d40b282e50"
+  },
+  "id": "iE1ZPTO88Pr981bz",
+  "tags": []
+}

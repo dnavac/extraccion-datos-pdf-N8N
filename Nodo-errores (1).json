@@ -1,0 +1,122 @@
+{
+  "name": "Nodo-errores",
+  "nodes": [
+    {
+      "parameters": {
+        "chatId": "5675073984",
+        "text": "=🚨 *ALERTA CRÍTICA DE SISTEMA* 🚨\nUn flujo acaba de fallar y requiere intervención técnica.\n\n🛠 *Workflow afectado:* Extraer Info RUT\n⚠️ *Detalle del Error:* <code>{{ $json.errorMensaje }}</code>\n🔗 https://juannavarro.app.n8n.cloud/workflow/I4EYnjCOF3e5JTMQ",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        928,
+        208
+      ],
+      "id": "f777d2de-35c7-4ddd-a8fc-c96b20a6b570",
+      "name": "Send a text message",
+      "webhookId": "c0738223-9924-4c3f-8b29-90feab6f3127",
+      "credentials": {
+        "telegramApi": {
+          "id": "s94dC8Jj8YWpZuJO",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Nodo Code - \"Preparar Alerta Error\"\nconst errorMsg = $json.error ?? \"Error desconocido\";\n\n// Limpiar el mensaje largo de AxiosError\nlet msgLimpio = errorMsg;\ntry {\n  const match = errorMsg.match(/\\{.*\\}/s);\n  if (match) {\n    const inner = JSON.parse(match[0]);\n    msgLimpio = inner.message ?? errorMsg;\n  }\n} catch(e) {}\n\nreturn [{\n  json: {\n    errorMensaje: msgLimpio,\n    errorCompleto: errorMsg,\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        704,
+        208
+      ],
+      "id": "725298bc-37e3-4015-a242-b320322f63ba",
+      "name": "Code in JavaScript2"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\n  \"error\": \"hubo un error\"\n}",
+        "options": {
+          "responseCode": 400
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1152,
+        208
+      ],
+      "id": "ae512197-a077-402c-b78b-cf848f1680d5",
+      "name": "Respond to Webhook1"
+    },
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "id": "b25e8218-1dd4-4475-aa7d-ef9cffea049b",
+      "typeVersion": 1.1,
+      "name": "Start",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "position": [
+        496,
+        208
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Send a text message": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript2": {
+      "main": [
+        [
+          {
+            "node": "Send a text message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "timeSavedMode": "fixed",
+    "errorWorkflow": "WLRDMwRkgFJb3b3M",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "versionId": "0dd68e52-06b4-45c2-bd0d-c00a302d934d",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "5eb610d22baacec4aba8d0498e816ce8a5c3324bb924b10b102db5d40b282e50"
+  },
+  "id": "KZ3gC3mwTDZWTaZi",
+  "tags": []
+}

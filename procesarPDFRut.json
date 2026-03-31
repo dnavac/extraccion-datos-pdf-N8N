@@ -1,0 +1,193 @@
+{
+  "name": "procesarPDFRut",
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -464,
+        -64
+      ],
+      "id": "56c075e7-054d-4638-a183-f511ae7485f5",
+      "name": "When Executed by Another Workflow"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "aaa111bb-cc22-dd33-ee44-ff5566778899",
+              "name": "fileName",
+              "value": "={{ $('When Executed by Another Workflow').item.binary.data.fileName }}",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -16,
+        -64
+      ],
+      "id": "ed5ee491-99fc-4630-857f-98dea8e9be2a",
+      "name": "Set fileName",
+      "alwaysOutputData": true,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "GPT-4O-MINI"
+        },
+        "responses": {
+          "values": [
+            {
+              "role": "system",
+              "content": "Eres un extractor de datos especializado en el formulario RUT de la DIAN (Colombia).CONTEXTO CRÍTICO:\nEl texto de entrada proviene de un extractor OCR/PDF que puede presentar las palabras en un orden visualmente incorrecto o mezclado. Tu tarea es actuar como un detective: busca las etiquetas numéricas (ej: \"5.\", \"24.\", \"41.\") y extrae el valor que aparezca inmediatamente después o en la proximidad lógica de esa etiqueta, ignorando el ruido intermedio. REGLAS DE EXTRACCIÓN (Basadas en el documento adjunto):Identificación Personal: Combina las casillas 31, 32, 33 y 34 para formar el nombre completo. Ubicación: La dirección (41) y el correo (42) son prioridades de precisión. Responsabilidades: Busca la sección \"Responsabilidades, Calidades y Atributos\". Extrae solo los números de dos dígitos (ej: \"05\", \"22\") que aparecen en esa cuadrícula. Fechas: Si la fecha aparece como \"20230128\", conviértela a \"2023-01-28\". ESTRUCTURA DE SALIDA (JSON PURO):Analiza el documento y devuelve ÚNICAMENTE un JSON válido con esta estructura, sin markdown (```json), sin texto adicional y sin explicaciones:\nJSON{ \"Identificación\": { \"5\": \"NIT\", \"6\": \"DV\", \"24\": \"Tipo de contribuyente\", \"25\": \"Tipo de documento\", \"26\": \"Número de identificación\", \"31\": \"Primer apellido\", \"32\": \"Segundo apellido\", \"33\": \"Primer nombre\", \"34\": \"Otros nombres\", \"35\": \"Razón social\", \"36\": \"Nombre comercial\", \"37\": \"Sigla\" }, \"Ubicación\": { \"38\": \"País\", \"39\": \"Departamento\", \"40\": \"Ciudad/Municipio\", \"41\": \"Dirección principal\", \"42\": \"Correo electrónico\", \"43\": \"Código postal\", \"44\": \"Teléfono 1\", \"45\": \"Teléfono 2\" }, \"Clasificación y Actividades\": { \"46\": \"Código actividad principal\", \"47\": \"Fecha inicio actividad principal\", \"48\": \"Código actividad secundaria\", \"49\": \"Fecha inicio actividad secundaria\", \"50\": \"Código otras actividades\", \"52\": \"Número de establecimientos\" }, \"Responsabilidades\": [], \"Metadatos\": { \"Número de formulario\": \"141049155211\", \"Fecha generación documento PDF\": \"30-01-2026 01:27:14PM\" } }"
+            },
+            {
+              "type": "file",
+              "fileType": "base64",
+              "fileName": "={{ $json.fileName }}"
+            }
+          ]
+        },
+        "builtInTools": {},
+        "options": {
+          "textFormat": {
+            "textOptions": {
+              "type": "json_object"
+            }
+          }
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 2.1,
+      "position": [
+        208,
+        -160
+      ],
+      "id": "fbc71261-b30f-4393-8600-560874e54dbc",
+      "name": "Message a model",
+      "alwaysOutputData": true,
+      "credentials": {
+        "openAiApi": {
+          "id": "zbbII90Vnrg1F91S",
+          "name": "n8n free OpenAI API credits"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "KZ3gC3mwTDZWTaZi",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/KZ3gC3mwTDZWTaZi",
+          "cachedResultName": "Nodo-errores"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [
+            "error"
+          ],
+          "schema": [
+            {
+              "id": "error",
+              "displayName": "error",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "removed": true
+            }
+          ],
+          "attemptToConvertTypes": true,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        560,
+        16
+      ],
+      "id": "b20b90c6-d7af-4cb8-8b09-0cee1c019e18",
+      "name": "Call 'Nodo-errores'"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Set fileName",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set fileName": {
+      "main": [
+        [
+          {
+            "node": "Message a model",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Call 'Nodo-errores'",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message a model": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Call 'Nodo-errores'",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "timeSavedMode": "fixed",
+    "errorWorkflow": "WLRDMwRkgFJb3b3M",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "versionId": "d23ef1ca-b5bf-41a6-8f61-42ea75ade625",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "5eb610d22baacec4aba8d0498e816ce8a5c3324bb924b10b102db5d40b282e50"
+  },
+  "id": "ACIQ9oOI0h8L4P2J",
+  "tags": []
+}
